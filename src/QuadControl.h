@@ -35,7 +35,7 @@ public:
   // controller gains
   float kpPosXY, kpPosZ;
   float kpVelXY, kpVelZ;
-  float kpBank, kdBank, kpYaw;
+  float kpBank, kdBank, kpYaw, kdYaw;
   float KiPosZ;
   float KiYaw;
   V3F kpPQR;

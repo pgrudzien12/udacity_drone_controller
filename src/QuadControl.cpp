@@ -34,6 +34,7 @@ void QuadControl::Init()
 	kpBank = config->Get(_config + ".kpBank", 0);
 	kdBank = config->Get(_config + ".kdBank", 0);
 	kpYaw = config->Get(_config + ".kpYaw", 0);
+	kdYaw = config->Get(_config + ".kdYaw", 0);
 	KiYaw = config->Get(_config + ".KiYaw", 0);
 
 	kpPQR = config->Get(_config + ".kpPQR", V3F());
@@ -72,11 +73,11 @@ VehicleCommand QuadControl::GenerateMotorCommands(float collThrustCmd, V3F momen
 
 	////////////////////////////// BEGIN STUDENT CODE ///////////////////////////
 
-
+	float l = L / sqrtf(2.f);
 	  // Desired moments
 	float c = collThrustCmd;
-	float p = momentCmd.x / this->L;  // Roll moment command
-	float q = momentCmd.y / this->L;  // Pitch moment command
+	float p = momentCmd.x / l;  // Roll moment command
+	float q = momentCmd.y / l;  // Pitch moment command
 	float r = momentCmd.z / this->kappa;  // Yaw moment command
 
 	// Calculating individual thrusts for the motors
@@ -342,6 +343,8 @@ float QuadControl::YawControl(float yawCmd, float yaw, float dt)
 	float yawRateCmd = 0;
 	////////////////////////////// BEGIN STUDENT CODE ///////////////////////////
 
+	
+
 	// Normalize the commanded yaw to be within the range [-pi, pi]
 	yawCmd = fmodf(yawCmd, 2.0f * F_PI);
 	if (yawCmd > F_PI) {
@@ -360,11 +363,21 @@ float QuadControl::YawControl(float yawCmd, float yaw, float dt)
 		yawError += 2.0f * F_PI;
 	}
 
-	// Proportional control for yaw
-	yawRateCmd = kpYaw * yawError;
-	integratedYawError += yawError * dt;
-	yawRateCmd += integratedYawError * KiYaw;
+	// Calculate the yaw velocity
+	float yawVel = (yaw - prevYaw) / dt;
+	float yawVelError = 0 - yawVel;
+	if (yawVelError > F_PI) {
+		yawVelError -= 2.0f * F_PI;
+	}
+	else if (yawVelError < -F_PI) {
+		yawVelError += 2.0f * F_PI;
+	}
 
+	// Proportional control for yaw (assuming that dt<1 to avoid excessing F_PI)
+	integratedYawError += yawError * dt;
+
+	yawRateCmd = kpYaw * yawError + kdYaw * yawVelError + integratedYawError * KiYaw;
+	prevYaw = yaw;
 
 	/////////////////////////////// END STUDENT CODE ////////////////////////////
 
@@ -380,7 +393,6 @@ VehicleCommand QuadControl::RunControl(float dt, float simTime)
 
 	// reserve some thrust margin for angle control
 	float thrustMargin = .1f * (maxMotorThrust - minMotorThrust);
-	thrustMargin = CONSTRAIN(thrustMargin, 0, 0.7f);
 	collThrustCmd = CONSTRAIN(collThrustCmd, (minMotorThrust + thrustMargin) * 4.f, (maxMotorThrust - thrustMargin) * 4.f);
 
 	V3F desAcc = LateralPositionControl(curTrajPoint.position, curTrajPoint.velocity, estPos, estVel, curTrajPoint.accel);
@@ -389,6 +401,7 @@ VehicleCommand QuadControl::RunControl(float dt, float simTime)
 	desOmega.z = YawControl(curTrajPoint.attitude.Yaw(), estAtt.Yaw(), dt);
 
 	V3F desMoment = BodyRateControl(desOmega, estOmega);
-
+	
+	
 	return GenerateMotorCommands(collThrustCmd, desMoment);
 }

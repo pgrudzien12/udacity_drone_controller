@@ -57,6 +57,7 @@ public:
   V3F estVel;
   V3F estPos;
   V3F estOmega;
+  float prevYaw;
 
   // measurements
   float optFlowX, optFlowY;
