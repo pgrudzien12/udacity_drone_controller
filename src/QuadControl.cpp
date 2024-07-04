@@ -74,13 +74,15 @@ VehicleCommand QuadControl::GenerateMotorCommands(float collThrustCmd, V3F momen
 	////////////////////////////// BEGIN STUDENT CODE ///////////////////////////
 
 	float l = L / sqrtf(2.f);
-	  // Desired moments
+
+	// Desired moments
 	float c = collThrustCmd;
 	float p = momentCmd.x / l;  // Roll moment command
 	float q = momentCmd.y / l;  // Pitch moment command
 	float r = momentCmd.z / this->kappa;  // Yaw moment command
 
 	// Calculating individual thrusts for the motors
+	// Honestly I don't know what motor is which right now, it seems that they are mixed up
 	float T1 = (c + p + q + r) / 4.0f;  // Front right
 	float T2 = (c - p + q - r) / 4.0f;  // Front left
 	float T3 = (c + p - q - r) / 4.0f;  // Rear right
@@ -162,6 +164,7 @@ V3F QuadControl::RollPitchControl(V3F accelCmd, Quaternion<float> attitude, floa
 
 
 	// If collThrustCmd is close to zero, we can't control roll/pitch effectively
+	// Thats because we calculate acceleration
 	if (collThrustCmd > 0.0f) {
 		// Convert collective thrust command to acceleration (m/s^2)
 		float c = -collThrustCmd / mass;
@@ -243,7 +246,7 @@ float QuadControl::AltitudeControl(float posZCmd, float velZCmd, float posZ, flo
 	////////////////////////////// BEGIN STUDENT CODE ///////////////////////////
 	velZCmd = CONSTRAIN(velZCmd, -maxDescentRate, maxAscentRate);
 
-	// Proportional and derivative control for altitude
+	// Proportional, derivative and integration control for altitude
 	float zError = posZCmd - posZ;
 	float zDotError = velZCmd - velZ;
 	float pTerm = kpPosZ * zError;
@@ -306,7 +309,7 @@ V3F QuadControl::LateralPositionControl(V3F posCmd, V3F velCmd, V3F pos, V3F vel
 	// Calculate velocity error
 	V3F velError = velCmd - vel;
 
-	// Proportional-derivative control for position
+	// Calculate errors
 	V3F pTerm = kpPosXY * posError;
 	V3F dTerm = kpVelXY * velError;
 
@@ -320,7 +323,6 @@ V3F QuadControl::LateralPositionControl(V3F posCmd, V3F velCmd, V3F pos, V3F vel
 
 	// Ensure the z-component of acceleration is zero
 	accelCmd.z = 0;
-
 
 	/////////////////////////////// END STUDENT CODE ////////////////////////////
 
@@ -342,8 +344,6 @@ float QuadControl::YawControl(float yawCmd, float yaw, float dt)
 
 	float yawRateCmd = 0;
 	////////////////////////////// BEGIN STUDENT CODE ///////////////////////////
-
-	
 
 	// Normalize the commanded yaw to be within the range [-pi, pi]
 	yawCmd = fmodf(yawCmd, 2.0f * F_PI);
@@ -379,10 +379,12 @@ float QuadControl::YawControl(float yawCmd, float yaw, float dt)
 	yawRateCmd = kpYaw * yawError + kdYaw * yawVelError + integratedYawError * KiYaw;
 	prevYaw = yaw;
 
+	// IMPORTANT: I don't know why but this one needs to be negative. I can't wrap my head around it :)
+	yawRateCmd = -yawRateCmd;
+
 	/////////////////////////////// END STUDENT CODE ////////////////////////////
 
 	return -yawRateCmd;
-
 }
 
 VehicleCommand QuadControl::RunControl(float dt, float simTime)
@@ -398,10 +400,9 @@ VehicleCommand QuadControl::RunControl(float dt, float simTime)
 	V3F desAcc = LateralPositionControl(curTrajPoint.position, curTrajPoint.velocity, estPos, estVel, curTrajPoint.accel);
 
 	V3F desOmega = RollPitchControl(desAcc, estAtt, collThrustCmd);
-	desOmega.z = YawControl(curTrajPoint.attitude.Yaw(), estAtt.Yaw(), dt);
+	desOmega.z = YawControl(curTrajPoint.attitude.Yaw(), estAtt.Yaw(), dt); // I added dt here to calc I and D parts of PID
 
 	V3F desMoment = BodyRateControl(desOmega, estOmega);
-	
 	
 	return GenerateMotorCommands(collThrustCmd, desMoment);
 }
